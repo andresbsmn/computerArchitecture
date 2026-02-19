@@ -16,7 +16,8 @@ struct Result{
 
 __global__ void max(int* a, int* c, int size){
     int idx = threadIdx.x  + blockIdx.x * blockDim.x;
-    if(idx < size){
+    if(2*idx+1 < size){
+        //itereert nog steeds over alles maar stopt vroeger (aangezien we 2 elementen per iteratie bekijken)
         if(a[2*idx]>a[2*idx + 1]){
             c[idx] = a[2*idx];
         }
@@ -42,8 +43,8 @@ int main() {
         //moeilijk om te voorspellen dus kiezen we een vaste waarde voor de threads
         if(N%2 != 0){ N+=1; }
         int a[N];
-        int Nc = N/2;
-        int c[Nc];
+        int Nc = N;
+        int c[Nc/2];
         int *d_c;
         int threads = 250;
         int block = (N+threads - 1)/threads; //https://stackoverflow.com/a/2745086
@@ -70,10 +71,10 @@ int main() {
                 cudaMalloc((void**)&d_c, Nc * sizeof(int)); 
                 block = (Nc + threads -1)/threads;
                 //extra overhead van steeds opnieuw alloceren is mss groter dan met grootte array blijven werken
-                max<<<block, threads>>>(p_arr, d_c, N);
-                cudaMemcpy(c, d_c, sizeof(int), cudaMemcpyDeviceToHost);
+                max<<<block, threads>>>(p_arr, d_c, Nc);
+                cudaMemcpy(c, d_c, Nc*sizeof(int), cudaMemcpyDeviceToHost);
                 for  (int i = 0; i < Nc; i++) {
-                    std::cout << a[i] << " ";
+                    std::cout << c[i] << " ";
                 } 
                 std::cout << std::endl;
                 cudaFree(p_arr);
@@ -95,7 +96,7 @@ int main() {
 
         tijdgem = tijdgem/aantalcycli;
         std::cout << "array met grootte "<< N << " heeft gemiddelde tijd: "<<tijdgem <<  "ms"<< std::endl;
-        std::cout << "hoogste is " << result.hoogste << " op positie " << result.positie << std::endl; 
+        std::cout << "hoogste is " << result.hoogste <<  std::endl; 
 }
     return 0;
 }
