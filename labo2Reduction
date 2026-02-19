@@ -1,0 +1,96 @@
+//array met grootte N wordt in array met grootte N/2 gestoken
+//ieder element in de return array is het grootste element
+//van 2 elementen van de originele array
+//we gaan steeds 2i en 2i+1 vergelijken
+//dus 0&1, 2&3 etc.
+
+#include <iostream>
+#include <cuda_runtime.h>
+#include <random>
+#include <chrono>
+//nu met atomic operation    
+struct Result{
+    int hoogste;
+    int positie;
+};
+
+__global__ void max(int* a, int* c, int size){
+    int idx = threadIdx.x  + blockIdx.x * blockDim.x;
+    if(idx < size){
+        if(a[2*idx]>a[2*idx + 1]){
+            c[idx] = a[2*idx];
+        }
+        else if(a[2*idx + 1]>a[2*idx]){
+            c[idx] = a[2*idx + 1];
+        }
+    }
+}
+
+
+int main() {
+    int *p_arr;
+    //int block = 1; //memory is shared per block, start with one for ease
+    Result result;
+    float tijdgem;
+    int aantalcycli = 1;
+
+    srand(67); //seed for consistant results
+    for(int N = 10; N < 12; N += 1){
+        //max threads per block 1024
+        //dus array kleiner dan 1024 als we per element een thread willen in 1 block
+        //blocks maal threads moet even groot zijn als array 
+        //moeilijk om te voorspellen dus kiezen we een vaste waarde voor de threads
+        if(N%2 != 0){ N+=1; }
+        int a[N];
+        int Nc = N/2;
+        int c[Nc];
+        int *d_c;
+        int threads = 250;
+        int block = (N+threads - 1)/threads; //https://stackoverflow.com/a/2745086
+        tijdgem = 0;
+        for (int i = 0; i < N; i++) {
+            a[i] = rand() % 101; // rand() % 101 gives 0 to 100
+        }
+/*     for  (int i = 0; i < N; i++) {
+        std::cout << a[i] << " ";
+    } */
+    //std::cout << std::endl;;
+        for(int i = 0; i<aantalcycli; i++){
+            cudaEvent_t start_cuda, stop_cuda;
+            cudaEventCreate(&start_cuda);
+            cudaEventCreate(&stop_cuda);
+            cudaEventRecord(start_cuda);
+            cudaMalloc((void**)&p_arr, N * sizeof(int));
+            cudaMalloc((void**)&d_c, Nc * sizeof(int)); 
+
+            //cudaMalloc((void**)&result, sizeof(result));
+        //copy to gpu
+            cudaMemcpy(p_arr, a, N * sizeof(int), cudaMemcpyHostToDevice);
+            while(Nc > 1){
+                //cudaMalloc((void**)&d_c, Nc * sizeof(int)); 
+                //extra overhead van steeds opnieuw alloceren is mss groter dan met grootte array blijven werken
+                max<<<block, threads>>>(p_arr, d_c, N);
+                cudaFree(p_arr);
+                p_arr = d_c;
+                Nc /= 2;
+            }
+        //copy back to host
+            cudaMemcpy(c, d_c, sizeof(int), cudaMemcpyDeviceToHost);
+            result.hoogste = c[0];
+            result.positie = 0; //effecitef berekenen kan nog als uitbreiding.
+            //overhead mee in timing   
+            cudaDeviceSynchronize();
+            cudaEventRecord(stop_cuda);
+            cudaEventSynchronize(stop_cuda);
+            float ms;
+            cudaEventElapsedTime(&ms, start_cuda, stop_cuda); 
+            tijdgem += ms;
+            //std::cout << "debug: "<< tijdgem << std::endl;
+        }
+
+        tijdgem = tijdgem/aantalcycli;
+        std::cout << "array met grootte "<< N << " heeft gemiddelde tijd: "<<tijdgem <<  "ms"<< std::endl;
+        std::cout << "hoogste is " << result.hoogste << " op positie " << result.positie << std::endl; 
+}
+    return 0;
+}
