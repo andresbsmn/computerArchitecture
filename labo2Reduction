@@ -51,31 +51,36 @@ int main() {
         for (int i = 0; i < N; i++) {
             a[i] = rand() % 101; // rand() % 101 gives 0 to 100
         }
-/*     for  (int i = 0; i < N; i++) {
-        std::cout << a[i] << " ";
-    } */
-    //std::cout << std::endl;;
+        for  (int i = 0; i < N; i++) {
+            std::cout << a[i] << " ";
+        } 
+        std::cout << std::endl;
         for(int i = 0; i<aantalcycli; i++){
             cudaEvent_t start_cuda, stop_cuda;
             cudaEventCreate(&start_cuda);
             cudaEventCreate(&stop_cuda);
             cudaEventRecord(start_cuda);
             cudaMalloc((void**)&p_arr, N * sizeof(int));
-            cudaMalloc((void**)&d_c, Nc * sizeof(int)); 
+            //cudaMalloc((void**)&d_c, Nc * sizeof(int)); 
 
             //cudaMalloc((void**)&result, sizeof(result));
         //copy to gpu
             cudaMemcpy(p_arr, a, N * sizeof(int), cudaMemcpyHostToDevice);
             while(Nc > 1){
-                //cudaMalloc((void**)&d_c, Nc * sizeof(int)); 
+                cudaMalloc((void**)&d_c, Nc * sizeof(int)); 
+                block = (Nc + threads -1)/threads;
                 //extra overhead van steeds opnieuw alloceren is mss groter dan met grootte array blijven werken
                 max<<<block, threads>>>(p_arr, d_c, N);
+                cudaMemcpy(c, d_c, sizeof(int), cudaMemcpyDeviceToHost);
+                for  (int i = 0; i < Nc; i++) {
+                    std::cout << a[i] << " ";
+                } 
+                std::cout << std::endl;
                 cudaFree(p_arr);
                 p_arr = d_c;
                 Nc /= 2;
             }
         //copy back to host
-            cudaMemcpy(c, d_c, sizeof(int), cudaMemcpyDeviceToHost);
             result.hoogste = c[0];
             result.positie = 0; //effecitef berekenen kan nog als uitbreiding.
             //overhead mee in timing   
