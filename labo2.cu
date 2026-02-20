@@ -42,7 +42,7 @@ int main() {
         result = max(arr, N);
         const auto end = std::chrono::steady_clock::now();
         const std::chrono::duration<double> elapsed_seconds{end-start};
-        tijdgem += elapsed_seconds.count()/1000;
+        tijdgem += elapsed_seconds.count()*1000;
     }
     tijdgem = tijdgem/aantalcycli;
     std::cout << "array met grootte "<< N << " heeft gemiddelde tijd: "<<tijdgem <<  "ms"<< std::endl;
