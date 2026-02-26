@@ -115,6 +115,23 @@ __global__ void inverseKleurR(uint8_t* image, uint8_t* resultImage, int arraysiz
     }
 }
 
+__global__ void sortKleur(uint8_t* image, uint8_t* resultImage, int arraysize){
+    //specifiek kleur pakken door threadID +... maal 3 (of +1 of +2) afh van kleur dat je wilt
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    int stride = blockDim.x * gridDim.x;
+    for (int i = tid; i =< arraysize/3; i += stride) {
+        // arraysize/3 => kan niet out of bounds gaan
+        // er gaan altijd evenveel kleuren zijn
+        resultImage[i] = image[i*3];
+        // voor groen met offset van arraysize/3
+        // rood is altijd de 1ste pixel, dus als i max is
+        // zal je niet out of bounds gaan
+        resultImage[i+arraysize/3] = image[i*3+1];
+        //idem voor blauw
+        resultImage[i+2*arraysize/3] = image[i*3+2];
+    }
+    }
+
 int main (void) {
     int threads = 1024;
     int totaalThreads = N*M*C / 16;     // verhouding van 1 thread per 16 elementen, nmc grootte orde miljoen
