@@ -1,0 +1,146 @@
+#include <iostream>
+#include <cuda_runtime.h>
+#include <vector>
+//nu met meerdere blocks
+// CUDA kernel to rev 1 arrays
+
+__global__ void matrixMultiplicationGPU(int *m1, int *m2, int *result, int rows, int columns) 
+{
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    int size = rows * rows;
+
+    if(idx < size)
+    {
+        int row = idx / rows;
+        int col = idx % rows;
+        int sum = 0;
+
+        for(int k = 0; k < rows; k++)
+        {
+            sum += m1[row * rows + k] * m2[k * rows + col];
+        }
+
+        result[row * rows + col] = sum;
+    }
+}
+
+
+
+std::vector<int> matrixMultiplicationCPU(const std::vector<int>& m1,
+                                         const std::vector<int>& m2,
+                                        const int rows){
+    //is return vector faster or pass result matrix by value?
+    std::vector<int> result(rows*rows);
+    const int columns = rows; //alleen vierkanten, aanpassen indien rechthoek!
+    int idx;
+    int sum;
+    for(int r = 0; r < rows; r++) {
+        for(int c = 0; c < columns; c++) {
+            //voor iedere rij in m1 moeten we elke kolom eens doorlopen.
+            //bij m1 kolom, rij vermenigvuldigen met
+            //m2 omgekeerde van m1 idx
+            sum = 0;
+            for(int k = 0; k<rows; k++){
+                sum += m1[r * rows + k] * m2[k * columns + c];
+            }
+        idx = r * rows + c;
+        result[idx] = sum;
+        }
+    }
+    return result;
+}
+
+
+void printMatrix(const std::vector<int>& m, int rows, int cols) {
+    for(int r = 0; r < rows; r++) {
+        for(int c = 0; c < cols; c++) {
+            std::cout << m[r * cols + c] << " ";
+        }
+        std::cout << std::endl;
+    }
+}
+
+int main() {
+    int rows = 3;
+    int columns = 3;
+    int size = rows * columns;
+    std::vector<int> matrix1(size);
+    matrix1 = {1,4,2,3,6,8,7,5,9};
+
+    std::vector<int> matrix2(size);
+    matrix2 = {1,4,2,3,6,8,7,5,9};
+
+    std::vector<int> result_matrix(size);
+
+    if(rows != columns){// bij rechthoek zou kolom/rij omgedraait moeten worden
+        std::cout << "rechthoek kan nog niet" << std::endl; return 1;
+    }   
+
+    int* d_matrix1; //d_ = device = gpu
+    int* d_matrix2;
+    int* d_result_matrix;
+
+    int threads = 256;
+    int blocks = (size + threads - 1) / threads;
+/* 
+-------------------------begin cpu-------------------------------------
+*/
+    
+/*     result_matrix = matrixMultiplicationCPU(matrix1, matrix2, rows);
+    printMatrix(matrix1, rows, columns);
+    std::cout << "-------------------------------------------------------" << std::endl;
+    printMatrix(matrix2, rows, columns);
+    std::cout << "-------------------------------------------------------" << std::endl;
+    printMatrix(result_matrix, rows, columns);
+ */
+
+/* 
+-------------------------eind cpu-------------------------------------
+*/
+
+/* 
+----------------------begin gpu, Global memory------------------------
+ */
+
+    //met threads kan hier beginnen, moet wss niet, gewoon cpu/gpu vgl.
+
+    // Allocate device memory
+    cudaMalloc(&d_matrix1, size* sizeof(int));
+    cudaMalloc(&d_matrix2, size* sizeof(int));
+    cudaMalloc(&d_result_matrix, size* sizeof(int));
+    
+    // Copy data from host to device
+    cudaMemcpy(d_matrix1, matrix1.data(), size * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_matrix2, matrix2.data(), size * sizeof(int), cudaMemcpyHostToDevice);
+    
+    //moet niet voor c denk ik want is toch lege array?   
+    // Launch kernel (1 block of N threads)
+    cudaEvent_t start_cuda, stop_cuda;
+    cudaEventCreate(&start_cuda);
+    cudaEventCreate(&stop_cuda);
+    cudaEventRecord(start_cuda);
+    matrixMultiplicationGPU<<<blocks, threads>>>(d_matrix1, d_matrix2, d_result_matrix, rows, columns);
+    cudaDeviceSynchronize();
+    cudaEventRecord(stop_cuda);
+    cudaEventSynchronize(stop_cuda);
+    float ms;
+    cudaEventElapsedTime(&ms, start_cuda, stop_cuda);
+    std::cout << "tijd: "<<ms << std::endl;
+    // Copy result back to host
+    cudaMemcpy(result_matrix.data(), d_result_matrix, size * sizeof(int), cudaMemcpyDeviceToHost);
+    cudaFree(d_matrix1);cudaFree(d_matrix2);
+    cudaFree(d_result_matrix);
+    std::cout << std::endl << std::endl;
+
+
+    printMatrix(matrix1, rows, rows);
+    std::cout << "-------------------------------------------------------" << std::endl;
+    printMatrix(matrix2, rows, rows);
+    std::cout << "-----------------MAAL MET GPU, global mem--------------------------" << std::endl;
+    printMatrix(result_matrix, rows, rows);
+/* 
+----------------------eind gpu, Global memory------------------------
+ */
+
+    return 0;
+}
