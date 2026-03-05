@@ -1,0 +1,119 @@
+#include <iostream>
+#include <cuda_runtime.h>
+#include <vector>
+//nu met meerdere blocks
+// CUDA kernel to rev 1 arrays
+__global__ void matrixCopyGPU(int *a, int *c, int size) { 
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    if(idx < size)
+        c[idx] = a[idx];
+}
+
+__global__ void matrixTransposeGPU(int *a, int *c, int size) { 
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    int invidx = ;
+    if(idx < size)
+        int R = rows;
+        int K = columns;
+        int index, invIndex;
+
+
+}
+
+
+void matrixCopyCPU(const std::vector<int>& matrix,
+                   std::vector<int>& result) {
+    result = matrix;
+}
+void printMatrix(const std::vector<int>& m, int rows, int cols) {
+    for(int r = 0; r < rows; r++) {
+        for(int c = 0; c < cols; c++) {
+            std::cout << m[r * cols + c] << " ";
+        }
+        std::cout << std::endl;
+    }
+}
+void matrixTransposeCPU(const std::vector<int>& matrix,
+                   std::vector<int>& result, int rows, int columns) {
+    int R = rows;
+    int K = columns;
+    int index, invIndex;
+    for(int row = 0; row<R;row++){
+        for(int column = 0; column < K; column++ ){
+            index= row * R + column;
+            invIndex = column * K + row;               
+            result[invIndex] = matrix[index];
+        }
+    }
+}
+int main() {
+    int rows = 3;
+    int columns = 3;
+    int size = rows * columns;
+    std::vector<int> matrix(size);
+    matrix = {1,4,2,3,6,8,7,5,9};
+    std::vector<int> result_matrix(size);
+
+    if(rows != columns){// bij rechthoek zou kolom/rij omgedraait moeten worden
+        std::cout << "rechthoek kan nog niet" << std::endl; return 1;
+    }   
+
+    int* d_matrix; //d_ = device = gpu
+    int* d_result_matrix;
+
+    int threads = 256;
+    int blocks = (matrix.size() + threads - 1) / threads;
+/* 
+-------------------------begin cpu-------------------------------------
+*/
+/*     //matrixCopyCPU(&matrix[0][0], &result_matrix[0][0]);
+    matrixTransposeCPU(matrix, result_matrix, rows, columns);
+    printMatrix(matrix, rows, columns);
+    std::cout << "-------------------------------------------------------" << std::endl;
+    printMatrix(result_matrix, rows, columns); */
+
+
+/* 
+-------------------------eind cpu-------------------------------------
+*/
+
+/* 
+----------------------begin gpu, Global memory------------------------
+ */
+
+    //met threads kan hier beginnen, moet wss niet, gewoon cpu/gpu vgl.
+
+    // Allocate device memory
+    cudaMalloc(&d_matrix, size* sizeof(int));
+    cudaMalloc(&d_result_matrix, size* sizeof(int));
+    
+    // Copy data from host to device
+    cudaMemcpy(d_matrix, matrix.data(), size * sizeof(int), cudaMemcpyHostToDevice);
+    //moet niet voor c denk ik want is toch lege array?   
+    // Launch kernel (1 block of N threads)
+    cudaEvent_t start_cuda, stop_cuda;
+    cudaEventCreate(&start_cuda);
+    cudaEventCreate(&stop_cuda);
+    cudaEventRecord(start_cuda);
+    matrixCopyGPU<<<blocks, threads>>>(d_matrix, d_result_matrix, matrix.size());
+    cudaDeviceSynchronize();
+    cudaEventRecord(stop_cuda);
+    cudaEventSynchronize(stop_cuda);
+    float ms;
+    cudaEventElapsedTime(&ms, start_cuda, stop_cuda);
+    std::cout << "tijd: "<<ms << std::endl;
+    // Copy result back to host
+    cudaMemcpy(result_matrix.data(), d_result_matrix, size * sizeof(int), cudaMemcpyDeviceToHost);
+    cudaFree(d_matrix);
+    cudaFree(d_result_matrix);
+    std::cout << std::endl << std::endl;
+    printMatrix(matrix, rows, columns);
+    std::cout << "-------------------------------------------------------" << std::endl;
+    printMatrix(result_matrix, rows, columns);
+
+/* 
+----------------------eind gpu, Global memory------------------------
+ */
+
+    return 0;
+}
