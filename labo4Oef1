@@ -1,0 +1,111 @@
+#include <iostream>
+#include <cuda_runtime.h>
+#include <vector>
+//nu met meerdere blocks
+// CUDA kernel to rev 1 arrays
+__global__ void matrixCopyGPU(int *a, int *c, int n, int arraysize) { 
+    //index wordt n-i want omgekeerd doorlopen
+    // iedere element heeft zijn eigen thread in 1 blok, dus index i komt overeen met threadId
+    // cores binnen 1 sm delen de ram? dus kunnen ze aan elkaars element?
+    int idx = threadIdx.x  + blockIdx.x * blockDim.x;
+    //threadId begint vanaf nul per blok
+    //dus om index te vinden moet je het blokID (begint vanaf 0) verminigvuldigen met
+    //hoeveel threads er in een blok zitten (de dimensie (1 dimensionaal voor array))
+    //In de main wordt er voor gezorgt dat er niet teveel (of te weinig) thread Ids + blockId*blockdim zijn
+    if (idx < arraysize) {
+        c[arraysize-idx-1] = a[idx]; //moet min 1 want index gaat van 0 tot 8
+    }
+}
+void matrixCopyCPU(const std::vector<int>& matrix,
+                   std::vector<int>& result) {
+    result = matrix;
+}
+void printMatrix(const std::vector<int>& m, int rows, int cols) {
+    for(int r = 0; r < rows; r++) {
+        for(int c = 0; c < cols; c++) {
+            std::cout << m[r * cols + c] << " ";
+        }
+        std::cout << std::endl;
+    }
+}
+void matrixTransposeCPU(const std::vector<int>& matrix,
+                   std::vector<int>& result, int rows, int columns) {
+    int R = rows;
+    int K = columns;
+    int index, invIndex;
+    for(int row = 0; row<R;row++){
+        for(int column = 0; column < K; column++ ){
+            index= row * R + column;
+            invIndex = column * K + row;               
+            result[invIndex] = matrix[index];
+        }
+    }
+}
+int main() {
+    int rows = 3;
+    int columns = 3;
+
+    std::vector<int> matrix(rows*columns);
+    matrix = {1,4,2,3,6,8,7,5,9};
+    std::vector<int> result_matrix(rows*columns);
+
+    if(rows != columns){// bij rechthoek zou kolom/rij omgedraait moeten worden
+        std::cout << "rechthoek kan nog niet" << std::endl; return 1;
+    }   
+
+    int* d_matrx; //d_ = device = gpu
+    int* d_result_matrix;
+/* 
+-------------------------begin cpu-------------------------------------
+*/
+    //matrixCopyCPU(&matrix[0][0], &result_matrix[0][0]);
+    matrixTransposeCPU(matrix, result_matrix, rows, columns);
+    printMatrix(matrix, rows, columns);
+    std::cout << "-------------------------------------------------------" << std::endl;
+    printMatrix(result_matrix, rows, columns);
+
+
+/* 
+-------------------------eind cpu-------------------------------------
+*/
+
+/* 
+----------------------begin gpu, Global memory------------------------
+ */
+/*     cudaEvent_t start_cuda, stop_cuda;
+    cudaEventCreate(&start_cuda);
+    cudaEventCreate(&stop_cuda);
+    cudaEventRecord(start_cuda);
+    //met threads kan hier beginnen, moet wss niet, gewoon cpu/gpu vgl.
+
+    // Allocate device memory
+    cudaMalloc((void**)&d_matrix, rows * columns * sizeof(int));
+    cudaMalloc((void**)&d_result_matrix, rows * columns * sizeof(int));
+
+    
+    // Copy data from host to device
+    cudaMemcpy(d_matrix, matrix, rows * columns * sizeof(int), cudaMemcpyHostToDevice);
+    //moet niet voor c denk ik want is toch lege array?   
+    // Launch kernel (1 block of N threads)
+    matrixCopyGPU<<<block, threads>>>(d_a, d_c, threads, N);
+
+    // Copy result back to host
+    cudaMemcpy(result_matrix, d_c, N * sizeof(int), cudaMemcpyDeviceToHost);
+
+    cudaDeviceSynchronize();
+    cudaEventRecord(stop_cuda);
+    cudaEventSynchronize(stop_cuda);
+    float ms;
+    cudaEventElapsedTime(&ms, start_cuda, stop_cuda);
+    std::cout << "tijd: "<<ms << std::endl;
+
+
+    cudaFree(d_a);
+    cudaFree(d_c);
+    std::cout << std::endl << std::endl; */
+/* 
+----------------------eind gpu, Global memory------------------------
+ */
+
+    return 0;
+}
