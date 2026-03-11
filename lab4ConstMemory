@@ -40,7 +40,7 @@ std::vector<int> generateMatrix(int rows, int cols) {
 
 int main() {
     //std::vector<int> sizes = {3};//voor test of het werkt
-    std::vector<int> sizes = {16, 32, 64, 256, 512, 1024};//amount of rows/columns dimensions would be to "verwarrend"
+    std::vector<int> sizes = {16, 32, 64, 127, 128, 129, 256, 512, 1024};//amount of rows/columns dimensions would be to "verwarrend"
     srand(42); //wat is de vraag tho?
     int* d_matrix1; //d_ = device = gpu
     int* d_result_matrix;
@@ -65,8 +65,8 @@ int main() {
     std::cout << std::string(30, '-') << std::endl;
     for(int size: sizes){
         if(size * size > 16384){
-            std::cout << std::setw(10) << size << std::setw(20) << " too large for constant memory" << std::endl;
-            continue;
+            std::cout << std::setw(10) << size << std::setw(20) << " too large for constant memory, geeft error: "; //endl komt wanneer error gegeven wordt
+            //continue;
         }
         blocks = (size * size + threads - 1) / threads;
         std::vector<int> m1 = generateMatrix(size, size);
@@ -79,7 +79,11 @@ int main() {
         
         // Copy data from host to device
         cudaMemcpy(d_matrix1, m1.data(), size * size * sizeof(int), cudaMemcpyHostToDevice);
-        cudaMemcpyToSymbol(d_const_matrix, m2.data(), size * size * sizeof(int));//merk op, ToSymbol want cnst
+        cudaError_t err = cudaMemcpyToSymbol(d_const_matrix, m2.data(), size * size * sizeof(int));//merk op, ToSymbol want cnst
+        if(err != cudaSuccess){
+            std::cout << "CUDA error: " << cudaGetErrorString(err) << std::endl;
+            continue;
+        }    
         //gpu is klaar
 
         // GPU opwarmen
