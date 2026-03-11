@@ -36,14 +36,11 @@ void printMatrix(const std::vector<int>& m, int rows, int cols) {
     }
 }
 void matrixTransposeCPU(const std::vector<int>& matrix,
-                   std::vector<int>& result, int rows, int columns) {
-    int R = rows;
-    int K = columns;
-    int index, invIndex;
-    for(int row = 0; row<R;row++){
-        for(int column = 0; column < K; column++ ){
-            index= row * R + column;
-            invIndex = column * K + row;               
+                        std::vector<int>& result, int rows, int columns) {
+    for (int row = 0; row < rows; row++) {
+        for (int col = 0; col < columns; col++) {
+            int index        = row * columns + col;   // source: row-major in original
+            int invIndex     = col * rows    + row;   // dest:   row-major in transposed
             result[invIndex] = matrix[index];
         }
     }
