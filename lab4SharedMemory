@@ -1,0 +1,152 @@
+#include <iostream>
+#include <cuda_runtime.h>
+#include <vector>
+#include <iomanip>
+
+#define TILE_SIZE 16
+
+__global__ void matrixMultiplicationshared(int *m1, int *m2, int *result, int rows) 
+{   
+    //shared memory, can be read by threads in the same block
+    //in contrast with global memory which can be read across blocks
+    //shared memory should be faster
+    __shared__ int tile_m1[TILE_SIZE][TILE_SIZE];
+    __shared__ int tile_m2[TILE_SIZE][TILE_SIZE];
+
+    int row = blockIdx.x * TILE_SIZE + threadIdx.x;
+    int col = blockIdx.y * TILE_SIZE + threadIdx.y;
+    int sum = 0;
+
+    // loop over tiles
+    for(int t = 0; t < (rows + TILE_SIZE - 1) / TILE_SIZE; t++)
+    {
+        // 1. load tile from m1 into shared memory
+        // m1: slide across the row → threadIdx.y picks the column within the tile
+        if(row < rows && (t * TILE_SIZE + threadIdx.y) < rows){
+            tile_m1[threadIdx.x][threadIdx.y] = m1[row * rows + (t * TILE_SIZE + threadIdx.y)];
+        }
+        else{
+            tile_m1[threadIdx.x][threadIdx.y] = 0;
+        }
+        // 2. load tile from m2 into shared memory
+        // m2: slide down the column → threadIdx.x picks the row within the tile
+        if(col < rows && (t * TILE_SIZE + threadIdx.x) < rows){
+            tile_m2[threadIdx.x][threadIdx.y] = m2[(t * TILE_SIZE + threadIdx.x) * rows + col];
+        }
+        else{
+            tile_m2[threadIdx.x][threadIdx.y] = 0;
+        }
+        __syncthreads();  // wait for everyone        
+        // 4. compute partial sum using shared memory
+        for(int k = 0; k < TILE_SIZE; k++){
+            sum += tile_m1[threadIdx.x][k] * tile_m2[k][threadIdx.y];
+        }
+        __syncthreads();
+        //result
+    }
+
+    // write result
+    if(row < rows && col < rows)
+        result[row * rows + col] = sum;
+}
+
+void printMatrix(const std::vector<int>& m, int rows, int cols) {
+    for(int r = 0; r < rows; r++) {
+        for(int c = 0; c < cols; c++) {
+            std::cout << m[r * cols + c] << " ";
+        }
+        std::cout << std::endl;
+    }
+}
+std::vector<int> generateMatrix(int rows, int cols) {
+    std::vector<int> matrix(rows * cols);
+    for(int i = 0; i < rows * cols; i++)
+        matrix[i] = rand() % 100;  //
+    return matrix;
+}
+
+int main() {
+    std::vector<int> sizes = {16, 32, 64, 256, 512, 1024};//amount of rows/columns dimensions would be to "verwarrend"
+    srand(42); //wat is de vraag tho?
+    int* d_matrix1; //d_ = device = gpu
+    int* d_matrix2;
+    int* d_result_matrix;
+    
+    //benchmark variables
+    int warmup = 10;
+    int iterations = 100;
+    
+    cudaEvent_t start_cuda, stop_cuda;
+    cudaEventCreate(&start_cuda);
+    cudaEventCreate(&stop_cuda);
+    
+    std::cout << "shared memory berekenen voor sizes ";
+    for(int size: sizes){
+        std::cout<<size<<", ";
+    }
+    std::cout<<std::endl;
+    std::cout << std::setw(10) << "size" << std::setw(20) << "avg time (ms)" << std::endl;
+    std::cout << std::string(30, '-') << std::endl;
+    for(int size: sizes){
+        std::vector<int> m1 = generateMatrix(size, size);
+        std::vector<int> m2 = generateMatrix(size, size);
+        std::vector<int> result_matrix(size * size);
+        //gpu klaarmaken
+        // Allocate device memory
+        cudaMalloc(&d_matrix1, size * size* sizeof(int));
+        cudaMalloc(&d_matrix2, size * size* sizeof(int));
+        cudaMalloc(&d_result_matrix, size * size* sizeof(int));
+        
+        // Copy data from host to device
+        //cudaEventRecord(start_cuda);
+        cudaMemcpy(d_matrix1, m1.data(), size * size * sizeof(int), cudaMemcpyHostToDevice);
+        cudaMemcpy(d_matrix2, m2.data(), size * size * sizeof(int), cudaMemcpyHostToDevice);
+        //cudaEventRecord(stop_cuda);
+        //float ms;
+        //cudaEventElapsedTime(&ms, start_cuda, stop_cuda);
+        //float avgTime = ms/iterations;
+        //std::cout << "tijd voor memcpy naar gpu: "<<avgTime << std::endl;
+
+        dim3 threads(TILE_SIZE, TILE_SIZE);  // 16x16 = 256 threads per block
+        dim3 blocks((size + TILE_SIZE - 1) / TILE_SIZE, (size + TILE_SIZE - 1) / TILE_SIZE);
+        //gpu is klaar
+
+        // GPU opwarmen
+        for(int i = 0; i < warmup; i++){
+            matrixMultiplicationshared<<<blocks, threads>>>(d_matrix1, d_matrix2, d_result_matrix, size);
+        }
+        cudaDeviceSynchronize();
+
+        cudaEventRecord(start_cuda);
+        for(int i = 0; i< iterations; i++){
+        matrixMultiplicationshared<<<blocks, threads>>>(d_matrix1, d_matrix2, d_result_matrix, size);
+        }
+        cudaDeviceSynchronize();//timen buiten de loop, anders deze overhead mee in resultaten
+        cudaEventRecord(stop_cuda);
+        cudaEventSynchronize(stop_cuda);
+        float ms;
+        cudaEventElapsedTime(&ms, start_cuda, stop_cuda);
+        float avgTime = ms/iterations;
+        std::cout << std::setw(10) << size << std::setw(20) << avgTime << std::endl;
+        // Copy result back to host, not really neceserry now
+        //cudaMemcpy(result_matrix.data(), d_result_matrix, size*size * sizeof(int), cudaMemcpyDeviceToHost);
+        cudaFree(d_matrix1);cudaFree(d_matrix2);
+        cudaFree(d_result_matrix);
+    }
+    return 0;
+}
+/*
+tijd: 2.02525
+1 4 2
+3 6 8
+7 5 9
+
+1 4 2
+3 6 8
+7 5 9
+
+27 38 52
+77 88 126
+85 103 135
+OK
+*/
