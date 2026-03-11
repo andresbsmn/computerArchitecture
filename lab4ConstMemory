@@ -1,0 +1,128 @@
+#include <iostream>
+#include <cuda_runtime.h>
+#include <vector>
+#include <iomanip>
+
+__constant__ int d_const_matrix[16384]; //max 64 KB binary of decimal, no error given :)
+
+__global__ void matrixMultiplicationsConstant(int *m1, int *result, int rows) {   
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    int size = rows * rows;
+
+    if(idx < size)
+    {
+        int row = idx / rows;
+        int col = idx % rows;
+        int sum = 0;
+
+        for(int k = 0; k < rows; k++)
+        {
+            sum += m1[row * rows + k] * d_const_matrix[k * rows + col];
+        }
+        result[row * rows + col] = sum;
+    }
+}
+
+void printMatrix(const std::vector<int>& m, int rows, int cols) {
+    for(int r = 0; r < rows; r++) {
+        for(int c = 0; c < cols; c++) {
+            std::cout << m[r * cols + c] << " ";
+        }
+        std::cout << std::endl;
+    }
+}
+std::vector<int> generateMatrix(int rows, int cols) {
+    std::vector<int> matrix(rows * cols);
+    for(int i = 0; i < rows * cols; i++)
+        matrix[i] = rand() % 100;  //
+    return matrix;
+}
+
+int main() {
+    //std::vector<int> sizes = {3};//voor test of het werkt
+    std::vector<int> sizes = {16, 32, 64, 256, 512, 1024};//amount of rows/columns dimensions would be to "verwarrend"
+    srand(42); //wat is de vraag tho?
+    int* d_matrix1; //d_ = device = gpu
+    int* d_result_matrix;
+    
+    //benchmark variables
+    int warmup = 10;
+    int iterations = 100;
+    
+    int threads = 256;
+    int blocks; // afh van size, dus in de loop waarde
+
+    cudaEvent_t start_cuda, stop_cuda;
+    cudaEventCreate(&start_cuda);
+    cudaEventCreate(&stop_cuda);
+    
+    std::cout << "shared memory berekenen voor sizes ";
+    for(int size: sizes){
+        std::cout<<size<<", ";
+    }
+    std::cout<<std::endl;
+    std::cout << std::setw(10) << "size" << std::setw(20) << "avg time (ms)" << std::endl;
+    std::cout << std::string(30, '-') << std::endl;
+    for(int size: sizes){
+        if(size * size > 16384){
+            std::cout << std::setw(10) << size << std::setw(20) << " too large for constant memory" << std::endl;
+            continue;
+        }
+        blocks = (size * size + threads - 1) / threads;
+        std::vector<int> m1 = generateMatrix(size, size);
+        std::vector<int> m2 = generateMatrix(size, size);
+        std::vector<int> result_matrix(size * size);
+        //gpu klaarmaken
+        // Allocate device memory
+        cudaMalloc(&d_matrix1, size * size* sizeof(int));
+        cudaMalloc(&d_result_matrix, size * size* sizeof(int));
+        
+        // Copy data from host to device
+        cudaMemcpy(d_matrix1, m1.data(), size * size * sizeof(int), cudaMemcpyHostToDevice);
+        cudaMemcpyToSymbol(d_const_matrix, m2.data(), size * size * sizeof(int));//merk op, ToSymbol want cnst
+        //gpu is klaar
+
+        // GPU opwarmen
+        for(int i = 0; i < warmup; i++){
+            matrixMultiplicationsConstant<<<blocks, threads>>>(d_matrix1, d_result_matrix, size);
+        }
+        cudaDeviceSynchronize();
+
+        cudaEventRecord(start_cuda);
+        for(int i = 0; i< iterations; i++){
+        matrixMultiplicationsConstant<<<blocks, threads>>>(d_matrix1, d_result_matrix, size);
+        }
+        cudaDeviceSynchronize();//timen buiten de loop, anders deze overhead mee in resultaten
+        cudaEventRecord(stop_cuda);
+        cudaEventSynchronize(stop_cuda);
+        float ms;
+        cudaEventElapsedTime(&ms, start_cuda, stop_cuda);
+        float avgTime = ms/iterations;
+        std::cout << std::setw(10) << size << std::setw(20) << avgTime << std::endl;
+        // Copy result back to host, not really neceserry now
+        cudaMemcpy(result_matrix.data(), d_result_matrix, size*size * sizeof(int), cudaMemcpyDeviceToHost);
+        cudaFree(d_matrix1);
+
+    }
+    return 0;
+}
+/*
+        printMatrix(m1, size, size);
+        std::cout << "-------------------------------------------------------" << std::endl;
+        printMatrix(m2, size, size);
+        std::cout << "-----------------MAAL MET GPU, cnst mem--------------------------" << std::endl;
+        printMatrix(result_matrix, size, size);
+        cudaFree(d_result_matrix);
+------------------------------
+66 40 81 
+41 12 58
+21 40 35
+-------------------------------------------------------
+43 74 43
+17 4 96
+62 92 48
+-----------------MAAL MET GPU, cnst mem--------------------------
+8540 12496 10566
+5563 8418 5699
+3753 4934 6423
+*/
