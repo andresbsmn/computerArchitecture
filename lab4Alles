@@ -156,8 +156,9 @@ int main() {
           << std::setw(20) << "shared (ms)"
           << std::setw(20) << "constant (ms)"
           << std::setw(20) << "cpu (ms)" << std::endl;
-    std::cout << std::string(30, '-') << std::endl;
+    std::cout << std::string(90, '-') << std::endl;
     for(int size: sizes){
+        std::cout << std::setw(10) << size;
         blocks1D = (size * size + threads1D - 1) / threads1D;
         std::vector<int> m1 = generateMatrix(size, size);
         std::vector<int> m2 = generateMatrix(size, size);
@@ -182,6 +183,7 @@ int main() {
         cudaEventSynchronize(stop_cuda);
         cudaEventElapsedTime(&ms, start_cuda, stop_cuda);
         float globalTime = ms/iterations;
+        std::cout << std::setw(20) << globalTime;
 
 
         //shared memory:
@@ -199,6 +201,7 @@ int main() {
         cudaEventSynchronize(stop_cuda);
         cudaEventElapsedTime(&ms, start_cuda, stop_cuda);
         float sharedTime = ms/iterations;
+        std::cout    << std::setw(20) << sharedTime;
 
         //constant memory:
         float constResult;
@@ -219,24 +222,21 @@ int main() {
             cudaEventElapsedTime(&ms, start_cuda, stop_cuda);
             constResult = (ms/iterations);
         }
+        if(constResult > 0 ){
+              std::cout << std::setw(20) << constResult;}
+        else{
+            std::cout << std::setw(20) << "N/A";
+        } 
         //CPU:
         const auto start = std::chrono::steady_clock::now();
         for(int i = 0; i<iterations;i++){
             matrixMultiplicationCPU(m1, m2, size);
         }
         const auto end = std::chrono::steady_clock::now();
-        const std::chrono::duration<double> elapsed_miliseconds{end-start};
+        const std::chrono::duration<double, std::milli> elapsed_miliseconds{end-start};
         float CPUTime = elapsed_miliseconds.count()/iterations;
 
-        std::cout << std::setw(10) << size
-              << std::setw(20) << globalTime
-              << std::setw(20) << sharedTime;
-        if(constResult > 0 ){
-              std::cout << std::setw(20) << constResult;}
-        else{
-            std::cout << std::setw(20) << "N/A";
-        }      
-              std::cout<< std::setw(20)<< CPUTime << std::endl;
+        std::cout<< std::setw(20)<< CPUTime << std::endl;
         // Copy result back to host, not really neceserry now
         cudaMemcpy(result_matrix.data(), d_result_matrix, size*size * sizeof(int), cudaMemcpyDeviceToHost);
         cudaFree(d_matrix1);
